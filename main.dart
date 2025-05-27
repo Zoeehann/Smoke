@@ -1,6 +1,9 @@
 // main.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 void main() => runApp(const SmokeApp());
 
@@ -108,7 +111,7 @@ class StartPage extends StatelessWidget {
                     language: language,
                     registeredEmail: registeredEmail,
                     registeredPassword: registeredPassword,
-                    onLoginSuccess: () => Navigator.pushReplacement(
+                    onLoginSuccess: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const HomePage()),
                     ),
@@ -331,18 +334,377 @@ class LoginPage extends StatelessWidget {
   }
 }
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _currentIndex = 0;
+  int openCount = 0;
+  int dailyLimit = 10;
+  DateTime today = DateTime.now();
+
+  void incrementCounter() {
+    if (openCount < dailyLimit) {
+      setState(() => openCount++);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "La limite journalière a été dépassée et l'étui à cigarettes est verrouillé !",
+          ),
+        ),
+      );
+    }
+  }
+
+  void resetCountIfNewDay() {
+    final now = DateTime.now();
+    if (now.day != today.day ||
+        now.month != today.month ||
+        now.year != today.year) {
+      setState(() {
+        today = now;
+        openCount = 0;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    resetCountIfNewDay();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      _buildMainTab(),
+      const UsageChartPage(),
+      const CommunityPage(),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Boîte intelligente"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help),
+            onPressed: () => _showHelpDialog(),
+          ),
+        ],
+      ),
+      body: pages[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Homepage'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Statistiques',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.group),
+            label: 'Communautaire',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainTab() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Text(
+            "Nombre d'ouvertures aujourd'hui :$openCount / $dailyLimit",
+            style: const TextStyle(fontSize: 20),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: incrementCounter,
+            child: const Text("Simuler l'ouverture d'un paquet de cigarettes"),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Text("Fixer la limite journalière. "),
+              Expanded(
+                child: Slider(
+                  value: dailyLimit.toDouble(),
+                  min: 1,
+                  max: 20,
+                  divisions: 19,
+                  label: dailyLimit.toString(),
+                  onChanged: (val) => setState(() => dailyLimit = val.toInt()),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Aide et contact"),
+        content: const Text(
+          "Adress: 12 Av. Léonard de Vinci, 92400 Courbevoie\n"
+          "Twitter/Instagram: smoke_team\n"
+          "Telephone: 07 12 34 56 78\n"
+          "Email: smoketeam@gmail.com",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Fermer"),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class UsageChartPage extends StatelessWidget {
+  const UsageChartPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Map<String, dynamic>> weeklyUsage = [
+      {'week': 'W1', 'avg': 9},
+      {'week': 'W2', 'avg': 7},
+      {'week': 'W3', 'avg': 6},
+      {'week': 'W4', 'avg': 5},
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(" La fréquence à laquelle vous fumez !"),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: WeeklyLineChart(weeklyUsage: weeklyUsage),
+      ),
+    );
+  }
+}
+
+class WeeklyLineChart extends StatelessWidget {
+  final List<Map<String, dynamic>> weeklyUsage;
+
+  const WeeklyLineChart({super.key, required this.weeklyUsage});
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 1.5,
+      child: LineChartWidget(weeklyUsage: weeklyUsage),
+    );
+  }
+}
+
+class LineChartWidget extends StatelessWidget {
+  final List<Map<String, dynamic>> weeklyUsage;
+
+  const LineChartWidget({super.key, required this.weeklyUsage});
+
+  @override
+  Widget build(BuildContext context) {
+    return LineChart(
+      LineChartData(
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index >= 0 && index < weeklyUsage.length) {
+                  return Text(weeklyUsage[index]['week']);
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: 1,
+            ),
+          ),
+        ),
+        minY: 0,
+        maxY: 10,
+        lineBarsData: [
+          LineChartBarData(
+            isCurved: true,
+            spots: List.generate(
+              weeklyUsage.length,
+              (index) => FlSpot(
+                index.toDouble(),
+                (weeklyUsage[index]['avg'] as num).toDouble(),
+              ),
+            ),
+            barWidth: 3,
+            dotData: FlDotData(show: true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CommunityPage extends StatefulWidget {
+  const CommunityPage({super.key});
+
+  @override
+  State<CommunityPage> createState() => _CommunityPageState();
+}
+
+class _CommunityPageState extends State<CommunityPage> {
+  final List<_Post> posts = [];
+  final TextEditingController commentCtrl = TextEditingController();
+  File? selectedImage;
+
+  final picker = ImagePicker();
+
+  void _pickImage() async {
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() => selectedImage = File(pickedFile.path));
+    }
+  }
+
+  void _submitPost() {
+    if (commentCtrl.text.isNotEmpty || selectedImage != null) {
+      posts.insert(0, _Post(commentCtrl.text, selectedImage));
+      commentCtrl.clear();
+      selectedImage = null;
+      setState(() {});
+    }
+  }
+
+  void _showExpertContact() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Contacter un expert"),
+        content: const Text(
+          "Dr. Jeanne Dupont\n"
+          "Spécialiste en tabacologie\n"
+          "Téléphone : 06 45 12 89 23\n"
+          "Email : jeanne.dupont@smoketeam.fr\n\n"
+          "Dr. Marc Lemoine\n"
+          "Psychologue addictologue\n"
+          "Téléphone : 07 88 56 32 10\n"
+          "Email : marc.lemoine@smoketeam.fr\n\n",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Fermer"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Smoke App"),
-        leading: const BackButton(),
+        title: const Text("communautaire"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.support_agent),
+            onPressed: _showExpertContact,
+          ),
+        ],
       ),
-      body: const Center(child: Text("Welcome to Smoke App 🚬")),
+      body: Column(
+        children: [
+          _buildPostInput(),
+          const Divider(),
+          Expanded(
+            child: ListView.builder(
+              itemCount: posts.length,
+              itemBuilder: (_, i) => _buildPostTile(posts[i]),
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  Widget _buildPostInput() {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          TextField(
+            controller: commentCtrl,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              hintText:
+                  "Notez vos mots de motivation ou vos sentiments à l'égard de l'arrêt du tabac.",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.image),
+                label: const Text("Télécharger une image"),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                onPressed: _submitPost,
+                icon: const Icon(Icons.send),
+                label: const Text("Post"),
+              ),
+            ],
+          ),
+          if (selectedImage != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Image.file(selectedImage!, height: 100),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostTile(_Post post) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: ListTile(
+        title: Text(post.text),
+        subtitle: post.image != null
+            ? Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Image.file(post.image!, height: 150),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+class _Post {
+  final String text;
+  final File? image;
+  _Post(this.text, this.image);
 }
 
 String _t(String text, Language lang) {
